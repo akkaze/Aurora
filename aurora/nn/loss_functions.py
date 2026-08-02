@@ -1,13 +1,8 @@
-import numpy as np
+import cunumpy as xp
 from aurora.autodiff.autodiff import Op, zeros_like
 
 from .activations import softmax
 from .utils import log_sum_exp
-
-try:
-    from aurora.ndarray import gpu_op, ndarray
-except ImportError:
-    pass
 
 
 class CrossEntropyOp(Op):
@@ -19,13 +14,10 @@ class CrossEntropyOp(Op):
 
     def compute(self, node, input_vals, output_val, use_numpy=True):
         assert len(input_vals) == 2
-        if use_numpy:
-            logits = input_vals[0]
-            actual = input_vals[1]
-            safe_log_softmax = logits - log_sum_exp(logits)
-            output_val[:] = np.mean(-np.sum(actual * safe_log_softmax, axis=1), keepdims=True)
-        else:
-            gpu_op.softmax_cross_entropy(input_vals[0], input_vals[1], output_val)
+        logits = input_vals[0]
+        actual = input_vals[1]
+        safe_log_softmax = logits - log_sum_exp(logits)
+        output_val[:] = xp.mean(-xp.sum(actual * safe_log_softmax, axis=1), keepdims=True)
 
     def gradient(self, node, output_grads):
         grad_A = (softmax(node.inputs[0]) + -1 * node.inputs[1]) * output_grads

@@ -1,9 +1,4 @@
-import numpy as np
-try:
-    from aurora.ndarray import gpu_op, ndarray
-except ImportError:
-    pass
-
+import cunumpy as xp
 
 class Node(object):
     """ Node object represents a node in the computational graph"""
@@ -147,19 +142,7 @@ class AddOp(Op):
         """
         assert len(input_vals) == 2
         # return input_vals[0] + input_vals[1]
-        if use_numpy:
-            output_val[:] = input_vals[0] + input_vals[1]
-        else:
-            if input_vals[0].shape == input_vals[1].shape:
-                gpu_op.matrix_elementwise_add(input_vals[0], input_vals[1], output_val)
-            elif input_vals[0].shape == (1,):
-                const = input_vals[0].asnumpy()[0]  # TODO: (upul) do we need this ? check it?
-                gpu_op.matrix_elementwise_add_by_const(input_vals[1], const, output_val)
-            elif input_vals[1].shape == (1,):
-                const = input_vals[1].asnumpy()[1]  # TODO: (upul) do we need this ? check it?
-                gpu_op.matrix_elementwise_add_by_const(input_vals[0], const, output_val)
-            else:
-                pass  # TODO: (upul) handle input[0] and input[1] in different shapes
+        output_val[:] = input_vals[0] + input_vals[1]
 
     def gradient(self, node, output_grads):
         """
@@ -208,11 +191,7 @@ class AddByConstOp(Op):
         :return:
         """
         assert len(input_vals) == 1
-        if use_numpy:
-            output_val[:] = node.const + input_vals[0]
-        else:
-            gpu_op.matrix_elementwise_add_by_const(
-                input_vals[0], node.const, output_val)
+        output_val[:] = node.const + input_vals[0]
 
     def gradient(self, node, output_grads):
         """
@@ -238,10 +217,8 @@ class SubOp(Op):
 
     def compute(self, node, input_vals, output_val, use_numpy=True):
         assert len(input_vals) == 2
-        if use_numpy:
-            output_val[:] = input_vals[0] - input_vals[1]
-        else:
-            gpu_op.matrix_elementwise_subtract(input_vals[0], input_vals[1], output_val)
+        output_val[:] = input_vals[0] - input_vals[1]
+
 
     def gradient(self, node, output_grads):
         return [output_grads, -1 * output_grads]
@@ -262,10 +239,7 @@ class SubByConstOp(Op):
 
     def compute(self, node, input_vals, output_val, use_numpy=True):
         assert len(input_vals) == 1
-        if use_numpy:
-            output_val[:] = input_vals[0] - node.const
-        else:
-            gpu_op.matrix_elementwise_subtract_by_const(input_vals[0], node.const, output_val)
+        output_val[:] = input_vals[0] - node.const
 
     def gradient(self, node, output_grads):
         return [output_grads]
@@ -304,11 +278,8 @@ class OnesLikeOp(Op):
 
     def compute(self, node, input_vals, output_val, use_numpy=True):
         assert len(input_vals) == 1
-        if use_numpy:
-            assert isinstance(input_vals[0], np.ndarray)
-            output_val[:] = np.ones(input_vals[0].shape)
-        else:
-            gpu_op.array_set(output_val, 1)
+        assert isinstance(input_vals[0], xp.ndarray)
+        output_val[:] = xp.ones(input_vals[0].shape)
 
     def gradient(self, node, output_grads):
         return [zeros_like(node.inputs[0])]
@@ -330,11 +301,8 @@ class ZerosLikeOp(Op):
 
     def compute(self, node, input_vals, output_val, use_numpy=True):
         assert len(input_vals) == 1
-        if use_numpy:
-            assert isinstance(input_vals[0], np.ndarray)
-            output_val[:] = np.zeros(input_vals[0].shape)
-        else:
-            gpu_op.array_set(output_val, 0)
+        assert isinstance(input_vals[0], xp.ndarray)
+        output_val[:] = xp.zeros(input_vals[0].shape)
 
     def gradient(self, node, output_grads):
         return [zeros_like(node.inputs[0])]
@@ -357,16 +325,9 @@ class ReshapeOp(Op):
 
     def compute(self, node, input_vals, output_val, use_numpy=True):
         assert len(input_vals) == 1
-        if use_numpy:
-            assert isinstance(input_vals[0], np.ndarray)
-            output_val[:] = np.reshape(input_vals[0], newshape=node.newshape)
-        else:
-            # TODO: (upul) changing share is not an expensive  operation. But looks
-            #     : bit ugly. Can't we find out an alternative approach?
-            input_shape = input_vals[0].shape
-            ndarray.reshape(output_val, input_shape)
-            input_vals[0].copyto(output_val)
-            ndarray.reshape(output_val, node.newshape)
+        assert isinstance(input_vals[0], xp.ndarray)
+        output_val[:] = xp.reshape(input_vals[0], newshape=node.newshape)
+    
 
     def gradient(self, node, output_grads):
         return [reshape_grad(node.inputs[0], output_grads)]
@@ -385,13 +346,7 @@ class ReshapeGradientOp(Op):
 
     def compute(self, node, input_vals, output_val, use_numpy=True):
         assert len(input_vals) == 2
-        if use_numpy:
-            output_val[:] = input_vals[1].reshape(input_vals[0].shape)
-        else:
-            # TODO: (upul) changing share is not an expensive  operation. But looks
-            #     : bit ugly. Can't we find out an alternative approach?
-            ndarray.reshape(output_val, input_vals[0].shape)
-            input_vals[1].copyto(output_val)
+        output_val[:] = input_vals[1].reshape(input_vals[0].shape)
 
     def gradient(self, node, output_grads):
         raise NotImplementedError('Gradient of ReshapeGradientOp not supported')
@@ -410,21 +365,7 @@ class MulOp(Op):
 
     def compute(self, node, input_vals, output_val, use_numpy=True):
         assert len(input_vals) == 2
-        if use_numpy:
-            output_val[:] = input_vals[0] * input_vals[1]
-        else:
-            ip_1_shape = input_vals[0].shape
-            ip_2_shape = input_vals[1].shape
-            if ip_1_shape == ip_2_shape:
-                gpu_op.matrix_elementwise_multiply(input_vals[0], input_vals[1], output_val)
-            elif ip_1_shape == (1,):
-                const_val = input_vals[0].asnumpy()[0]
-                gpu_op.matrix_elementwise_multiply_by_const(input_vals[1], const_val, output_val)
-            elif ip_2_shape == (1,):
-                const_val = input_vals[1].asnumpy()[0]
-                gpu_op.matrix_elementwise_multiply_by_const(input_vals[0], const_val, output_val)
-            else:
-                pass  # TODO (upul) handle ip_1_shape != ip_2_shape
+        output_val[:] = input_vals[0] * input_vals[1]
 
     def gradient(self, node, output_grads):
         return [node.inputs[1] * output_grads, node.inputs[0] * output_grads]
@@ -452,11 +393,7 @@ class MulByConstOp(Op):
 
     def compute(self, node, input_vals, output_val, use_numpy=True):
         assert len(input_vals) == 1
-        if use_numpy:
-            output_val[:] = node.const * input_vals[0]
-        else:
-            gpu_op.matrix_elementwise_multiply_by_const(
-                input_vals[0], node.const, output_val)
+        output_val[:] = node.const * input_vals[0]
 
     def gradient(self, node, output_grads):
         return [node.const * output_grads]
@@ -475,10 +412,7 @@ class DivOp(Op):
 
     def compute(self, node, input_vals, output_val, use_numpy=True):
         assert len(input_vals) == 2
-        if use_numpy:
-            output_val[:] = input_vals[0] / input_vals[1]
-        else:
-            gpu_op.matrix_elementwise_division(input_vals[0], input_vals[1], output_val)
+        output_val[:] = input_vals[0] / input_vals[1]
 
     def gradient(self, node, output_grads):
         grad_A = output_grads / node.inputs[1]
@@ -501,10 +435,7 @@ class DivByConstOp(Op):
 
     def compute(self, node, input_vals, output_val, use_numpy=True):
         assert len(input_vals) == 1
-        if use_numpy:
-            output_val[:] = input_vals[0] / node.const
-        else:
-            gpu_op.matrix_elementwise_div_by_const(input_vals[0], node.const, output_val)
+        output_val[:] = input_vals[0] / node.const
 
     def gradient(self, node, output_grads):
         return [output_grads / node.const]
@@ -552,11 +483,9 @@ class ReduceSumOp(Op):
         :return:
         """
         assert len(input_vals) == 1
-        if use_numpy:
-            assert isinstance(output_val, np.ndarray)
-            output_val[:] = np.sum(input_vals[0], axis=0)
-        else:
-            gpu_op.reduce_sum_axis_zero(input_vals[0], output_val)
+        assert isinstance(output_val, xp.ndarray)
+        output_val[:] = xp.sum(input_vals[0], axis=0)
+
 
     def gradient(self, node, output_grads):
         return [output_grads]
@@ -579,10 +508,8 @@ class BroadcastToOp(Op):
 
     def compute(self, node, input_vals, output_val, use_numpy=True):
         assert len(input_vals) == 2
-        if use_numpy:
-            output_val[:] = np.broadcast_to(input_vals[0], input_vals[1].shape)
-        else:
-            gpu_op.broadcast_to(input_vals[0], output_val)
+        output_val[:] = xp.broadcast_to(input_vals[0], input_vals[1].shape)
+
 
     def gradient(self, node, output_grads):
         grad_A = reduce_sum(output_grads)
@@ -605,17 +532,12 @@ class MatMulOp(Op):  # TODO: (upul) double check what this class is doing
 
     def compute(self, node, input_vals, output_val, use_numpy=True):
         assert len(input_vals) == 2
-        if use_numpy:
-            if node.trans_A:
-                input_vals[0] = input_vals[0].T
-            if node.trans_B:
-                input_vals[1] = input_vals[1].T
-            output_val[:] = np.dot(input_vals[0], input_vals[1])
-        else:
-            gpu_op.matrix_multiply(
-                input_vals[0], node.trans_A,
-                input_vals[1], node.trans_B,
-                output_val)
+        if node.trans_A:
+            input_vals[0] = input_vals[0].T
+        if node.trans_B:
+            input_vals[1] = input_vals[1].T
+        output_val[:] = xp.dot(input_vals[0], input_vals[1])
+
 
     def gradient(self, node, output_grads):
         grad_A = matmul(output_grads, node.inputs[1], trans_A=False, trans_B=True)
@@ -658,6 +580,59 @@ def Parameter(name, init):
     return parameter_node
 
 
+class ConstOp(Op):
+    """
+    常量节点：不依赖输入，直接输出固定值。
+    该节点的值在构造时确定，且不会改变。
+    """
+    def __call__(self, value):
+        new_node = Op.__call__(self)
+        new_node.const = xp.asarray(value, dtype=xp.float32)  # 确保为数组
+        new_node.name = f'Const({new_node.const})'
+        return new_node
+
+    def compute(self, node, input_vals, output_val, use_numpy=True):
+        # node.const 是 numpy 数组，直接复制
+        output_val[:] = node.const
+
+    def gradient(self, node, output_grads):
+        # 常量没有梯度
+        return None
+
+    def infer_shape(self, node, input_shapes):
+        return node.const.shape
+
+
+class PrintOp(Op):
+    def __call__(self, node_A, message=""):
+        new_node = Op.__call__(self)
+        new_node.inputs = [node_A]
+        new_node.message = message
+        new_node.name = f'Print({node_A.name})'
+        return new_node
+
+    def compute(self, node, input_vals, output_val, use_numpy=True):
+        xp.set_printoptions(threshold=10, edgeitems=2)
+        val = input_vals[0]
+        print(f"{node.message}:\n {val}")
+        output_val[:] = val
+
+    def gradient(self, node, output_grads):
+        # 恒等传递梯度
+        return [output_grads]
+
+    def infer_shape(self, node, input_shapes):
+        return input_shapes[0]
+
+def Const(name, value):
+    """
+    创建一个常量节点（固定值，不可训练），类似于 Parameter 但有固定值。
+    用法： c = Const(name='c', value=5.0)
+    """
+    const_node = const(value)   # 使用 ConstOp 全局单例
+    const_node.name = name
+    return const_node
+
 # Global singleton operations
 add = AddOp()
 add_const = AddByConstOp()
@@ -676,3 +651,5 @@ reshape = ReshapeOp()
 reshape_grad = ReshapeGradientOp()
 matmul = MatMulOp()
 placeholder = PlaceholderOp()
+const = ConstOp()
+print_ = PrintOp()

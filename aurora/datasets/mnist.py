@@ -1,7 +1,8 @@
-import numpy as np
+import cunumpy as xp
 import gzip
 import pickle
 import os
+import numpy as np
 
 
 class MNIST:
@@ -12,8 +13,8 @@ class MNIST:
         self.X_train, self.y_train = train[0], train[1]
 
         # encoding y_train using one-hot encoding
-        self.y_train_one_hot = np.zeros((self.y_train.shape[0], 10))
-        self.y_train_one_hot[np.arange(self.y_train.shape[0]), self.y_train] = 1
+        self.y_train_one_hot = xp.zeros((self.y_train.shape[0], 10))
+        self.y_train_one_hot[xp.arange(self.y_train.shape[0]), self.y_train] = 1
 
         self.X_valid, self.y_valid = valid[0], valid[1]
         self.X_test, self.y_test = test[0], test[1]
@@ -21,7 +22,7 @@ class MNIST:
     def train_batch_generator(self):
         while True:
             rand_indices = np.random.choice(self.X_train.shape[0], self.batch_size, False)
-            yield self.X_train[rand_indices], self.y_train_one_hot[rand_indices]
+            yield xp.asarray(self.X_train[rand_indices]), xp.asarray(self.y_train_one_hot[rand_indices])
 
     def validation(self):
         return self.X_valid, self.y_valid

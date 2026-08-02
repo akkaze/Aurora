@@ -1,5 +1,5 @@
 from aurora.autodiff.autodiff import Op
-from aurora.nn.pyx.fast_pooling import max_pool_forward, max_pool_backward
+from aurora.nn.utils import max_pool_forward, max_pool_backward
 
 try:
     from aurora.ndarray import gpu_op
@@ -25,19 +25,12 @@ class MaxPoolOp(Op):
         stride_height = node.strides[0]
         stride_width = node.strides[1]
 
-        if use_numpy:
-            output_val[:] = max_pool_forward(input_vals[0],
-                                             filter_height=filter_height,
-                                             filter_width=filter_width,
-                                             stride_height=stride_height,
-                                             stride_width=stride_width)
-        else:
-            gpu_op.cudnn_pool_forward(input_vals[0],
-                                      filter_height, filter_width,
-                                      stride_height, stride_width,
-                                      'max',
-                                      output_val)
-            node.cache['forward'] = output_val
+        output_val[:] = max_pool_forward(input_vals[0],
+                                            filter_height=filter_height,
+                                            filter_width=filter_width,
+                                            stride_height=stride_height,
+                                            stride_width=stride_width)
+        node.cache['forward'] = output_val
 
     def gradient(self, node, output_grads):
         return [maxPoolBack(node.inputs[0], output_grads, cache=node.cache)]
@@ -81,20 +74,15 @@ class MaxPoolGradientOp(Op):
 
         data = input_vals[0]
         output_grad = input_vals[1]
-        if use_numpy:
-            output_val[:] = max_pool_backward(output_grad,
-                                              data,
-                                              filter_height=filter_height,
-                                              filter_width=filter_width,
-                                              stride_height=stride_height,
-                                              stride_width=stride_width
-                                              )
-        else:
-            gpu_op.cudnn_pool_backward(data, output_grad, node.cache['forward'],
-                                       filter_height, filter_width,
-                                       stride_height, stride_width,
-                                       'max',
-                                       output_val)
+
+        output_val[:] = max_pool_backward(output_grad,
+                                            data,
+                                            filter_height=filter_height,
+                                            filter_width=filter_width,
+                                            stride_height=stride_height,
+                                            stride_width=stride_width
+                                            )
+
 
     def gradient(self, node, output_grads):
         raise NotImplementedError('Gradient of AverageGradientOp is not implemented')

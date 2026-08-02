@@ -1,4 +1,4 @@
-import numpy as np
+import cunumpy as xp
 from aurora.autodiff.autodiff import Op
 from aurora.nn.utils import softmax_func
 try:
@@ -16,10 +16,8 @@ class ReluOp(Op):
 
     def compute(self, node, input_vals, output_val, use_numpy=True):
         assert len(input_vals) == 1
-        if use_numpy:
-            output_val[:] = np.maximum(input_vals[0], 0)
-        else:
-            gpu_op.relu(input_vals[0], output_val)
+        output_val[:] = xp.maximum(input_vals[0], 0)
+
 
     def gradient(self, node, output_grad):
         return [relu_grad(node.inputs[0], output_grad)]
@@ -39,10 +37,7 @@ class ReluGradientOp(Op):
 
     def compute(self, node, input_vals, output_val, use_numpy=True):
         assert len(input_vals) == 2
-        if use_numpy:
-            output_val[:] = np.sign(np.maximum(input_vals[0], 0)) * input_vals[1]
-        else:
-            gpu_op.relu_gradient(input_vals[0], input_vals[1], output_val)
+        output_val[:] = xp.sign(xp.maximum(input_vals[0], 0)) * input_vals[1]
 
     def gradient(self, node, output_grad):
         raise NotImplementedError('Gradient of ReluGradientOp not implemented')
@@ -76,10 +71,7 @@ class SigmoidOp(Op):
         :return:
         """
         assert len(input_vals) == 1
-        if use_numpy:
-            output_val[:] = 0.5 + 0.5*np.tanh(0.5*input_vals[0])
-        else:
-            raise NotImplementedError('GPU version not yet implemented')
+        output_val[:] = 0.5 + 0.5*xp.tanh(0.5*input_vals[0])
 
     def gradient(self, node, output_grads):
         x = node.inputs[0]
@@ -102,10 +94,7 @@ class SoftmaxOp(Op):
 
     def compute(self, node, input_vals, output_val, use_numpy=True):
         assert len(input_vals) == 1
-        if use_numpy:
-            output_val[:] = softmax_func(input_vals[0])
-        else:
-            gpu_op.softmax(input_vals[0], output_val)
+        output_val[:] = softmax_func(input_vals[0])
 
     def gradient(self, node, output_grads):
         raise NotImplementedError('Not yet implemented, Please use CrossEntropy operator')

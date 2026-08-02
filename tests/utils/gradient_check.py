@@ -1,38 +1,24 @@
+import cunumpy as xp
 import numpy as np
 
-
 def gradient_check_numpy_expr(func, x, output_gradient, h=1e-5):
-    """
-    This utility function calculates gradient of the function `func`
-    at `x`.
-    :param func:
-    :param x:
-    :param output_gradient:
-    :param h:
-    :return:
-    """
-    grad = np.zeros_like(x).astype(np.float32)
-    iter = np.nditer(x, flags=['multi_index'], op_flags=['readwrite'])
-    while not iter.finished:
-        idx = iter.multi_index
-        old_value = x[idx]
-
-        # calculate positive value
-        x[idx] = old_value + h
-        pos = func(x).copy()
-
-        # calculate negative value
-        x[idx] = old_value - h
-        neg = func(x).copy()
-
-        # restore
-        x[idx] = old_value
-
-        # calculate gradient
-        # Type of pos and neg will be memoryview if we are testing Cython functions.
-        # Therefore, we create numpy arrays be performing - operation.
-        # TODO: Don't we have an alternative method without creating numpy array from memoryview?
-        grad[idx] = np.sum((np.array(pos) - np.array(neg)) * output_gradient) / (2 * h)
-        iter.iternext()
-
-    return grad
+    # 使用 cunumpy 提供的转换函数
+    x_np = xp.to_numpy(x)
+    out_grad_np = xp.to_numpy(output_gradient).astype(np.float64)
+    grad_np = np.zeros_like(x_np, dtype=np.float64)
+    it = np.nditer(x_np, flags=['multi_index'], op_flags=['readwrite'])
+    while not it.finished:
+        idx = it.multi_index
+        old = x_np[idx]
+        x_np[idx] = old + h
+        x_pert = xp.to_cunumpy(x_np)  # 转换为当前后端数组
+        pos = func(x_pert)
+        pos_np = xp.to_numpy(pos).astype(np.float64)
+        x_np[idx] = old - h
+        x_pert = xp.to_cunumpy(x_np)
+        neg = func(x_pert)
+        neg_np = xp.to_numpy(neg).astype(np.float64)
+        x_np[idx] = old
+        grad_np[idx] = np.sum((pos_np - neg_np) * out_grad_np) / (2 * h)
+        it.iternext()
+    return xp.to_cunumpy(grad_np)

@@ -1,4 +1,6 @@
-import numpy as np
+import cunumpy as xp
+import aurora.nn.c as c_fast_ops
+import aurora.nn.cuda as cuda_fast_ops
 
 
 def softmax_func(x):
@@ -9,8 +11,8 @@ def softmax_func(x):
     :param x:
     :return:
     """
-    stable_values = x - np.max(x, axis=1, keepdims=True)
-    return np.exp(stable_values) / np.sum(np.exp(stable_values), axis=1, keepdims=True)
+    stable_values = x - xp.max(x, axis=1, keepdims=True)
+    return xp.exp(stable_values) / xp.sum(xp.exp(stable_values), axis=1, keepdims=True)
 
 
 def log_sum_exp(x):
@@ -23,66 +25,110 @@ def log_sum_exp(x):
     :param x:
     :return:
     """
-    mx = np.max(x, axis=1, keepdims=True)
+    mx = xp.max(x, axis=1, keepdims=True)
     safe = x - mx
-    return mx + np.log(np.sum(np.exp(safe), axis=1, keepdims=True))
+    return mx + xp.log(xp.sum(xp.exp(safe), axis=1, keepdims=True))
 
 
 # Following two methods were used in the initial version of the convolution operations.
 # Later we introduced fast Cython versions of `im2col` and `col2im` implementations.
 # Hence, these two methods are obsolete.
-def im2col(image, filter_size=(3, 3), padding=(0, 0), stride=(1, 1)):
-    M, C, h, w, = image.shape
-    filter_height = filter_size[0]
-    filter_width = filter_size[1]
-    padding_height = padding[0]
-    padding_width = padding[1]
-    stride_height = stride[0]
-    stride_width = stride[1]
-    x_padded = np.pad(image, ((0, 0),
-                              (0, 0),
-                              (padding_height, padding_height),
-                              (padding_width, padding_width)),
-                      mode='constant')
-    h_new = int((h - filter_height + 2 * padding_height) / stride_height + 1)
-    w_new = int((w - filter_width + 2 * padding_width) / stride_width + 1)
-
-    out = np.zeros((filter_width * filter_height * C, M * h_new * w_new), dtype=image.dtype)
-
-    itr = 0
-    for i in range(h_new):
-        for j in range(w_new):
-            for m in range(M):
-                start_i = stride_height * i
-                end_i = stride_height * i + filter_width
-                start_j = stride_width * j
-                end_j = stride_width * j + filter_height
-                out[:, itr] = x_padded[m, :, start_i:end_i, start_j:end_j].ravel()
-                itr += 1
-    return out
-
-
-def col2im(cols, x_shape, filter_size=(3, 3), padding=(0, 0), stride=(1, 1)):
-    N, C, H, W = x_shape
-    filter_height = filter_size[0]
-    filter_width = filter_size[1]
-    padding_height = padding[0]
-    padding_width = padding[1]
-    stride_height = stride[0]
-    stride_width = stride[1]
-
-    H_padded, W_padded = H + 2 * padding_height, W + 2 * padding_width
-    x_padded = np.zeros((N, C, H_padded, W_padded), dtype=cols.dtype)
-
-    idx = 0
-    for i in range(0, H_padded - filter_height + 1, stride_height):
-        for j in range(0, W_padded - filter_width + 1, stride_width):
-            for m in range(N):
-                col = cols[:, idx]
-                col = col.reshape((C, filter_height, filter_width))
-                x_padded[m, :, i:i + filter_height, j:j + filter_width] += col
-                idx += 1
-    if padding[0] or padding[1] > 0:
-        return x_padded[:, :, padding_height:-padding_height, padding_width:-padding_width]
+def im2col(
+    image,
+    filter_height=2,
+    filter_width=2,
+    padding_height=0,
+    padding_width=0,
+    stride_height=1,
+    stride_width=1,
+):
+    if xp.is_cpu(image):
+        return c_fast_ops.im2col(
+            image,
+            filter_height,
+            filter_width,
+            padding_height,
+            padding_width,
+            stride_height,
+            stride_width,
+        )
     else:
-        return x_padded
+        return cuda_fast_ops.im2col_gpu(
+            image,
+            filter_height,
+            filter_width,
+            padding_height,
+            padding_width,
+            stride_height,
+            stride_width,
+        )
+
+
+def col2im(
+    cols,
+    N, C, H, W,
+    filter_height=2,
+    filter_width=2,
+    padding_height=0,
+    padding_width=0,
+    stride_height=1,
+    stride_width=1,
+):
+    filter_height = filter_height
+    filter_width = filter_width
+    padding_height = padding_height
+    padding_width = padding_width
+    stride_height = stride_height
+    stride_width = stride_width
+    if xp.is_cpu(cols):
+        return c_fast_ops.col2im(
+            cols,
+            N,
+            C,
+            H,
+            W,
+            filter_height,
+            filter_width,
+            padding_height,
+            padding_width,
+            stride_height,
+            stride_width,
+        )
+    else:
+        return cuda_fast_ops.col2im_gpu(
+            cols,
+            N,
+            C,
+            H,
+            W,
+            filter_height,
+            filter_width,
+            padding_height,
+            padding_width,
+            stride_height,
+            stride_width,
+        )
+
+
+def max_pool_forward(x, filter_height, filter_width, stride_height=1, stride_width=1):
+    if xp.is_cpu(x):
+        return c_fast_ops.max_pool_forward(
+            x, filter_height, filter_width, stride_height, stride_width
+        )
+    else:
+        return cuda_fast_ops.max_pool_forward_gpu(
+            x, filter_height, filter_width, stride_height, stride_width
+        )
+
+
+def max_pool_backward(
+    dy, x, filter_height, filter_width, stride_height=1, stride_width=1
+):
+    if xp.is_cpu(x):
+        return c_fast_ops.max_pool_backward(
+            dy, x, filter_height, filter_width, stride_height, stride_width
+        )
+    else:
+        return cuda_fast_ops.max_pool_backward_gpu(
+            dy, x, filter_height, filter_width, stride_height, stride_width
+        )

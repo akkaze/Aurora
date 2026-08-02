@@ -1,4 +1,5 @@
 import numpy as np
+import cunumpy as xp
 import aurora as au
 import aurora.autodiff as ad
 import timeit
@@ -7,26 +8,31 @@ import argparse
 
 def measure_accuracy(activation, data, use_gpu=False):
     X_val, y_val = data
+    X_val, y_val = xp.asarray(X_val), xp.asarray(y_val)
     executor = ad.Executor([activation], use_gpu=use_gpu)
-    prob_val, = executor.run(feed_shapes={X: X_val})
-    if use_gpu:
-        prob_val = prob_val.asnumpy()
+    (prob_val,) = executor.run(feed_shapes={X: X_val})
 
-    correct = np.sum(np.equal(y_val, np.argmax(prob_val, axis=1)))
+    correct = xp.sum(xp.equal(y_val, xp.argmax(prob_val, axis=1)))
     percentage = (correct / (y_val.shape[0])) * 100.00
     return percentage
 
 
 def build_graph(X, y, input_size, hid_1_size, hid_2_size, output_size):
     # Parameter of the model
-    rand = np.random.RandomState(seed=1024)
-    W1 = ad.Parameter(name="W1", init=rand.normal(scale=0.1, size=(input_size, hid_1_size)))
+    rand = xp.random.RandomState(seed=1024)
+    W1 = ad.Parameter(
+        name="W1", init=rand.normal(scale=0.1, size=(input_size, hid_1_size))
+    )
     b1 = ad.Parameter(name="b1", init=rand.normal(scale=0.1, size=(hid_1_size)))
 
-    W2 = ad.Parameter(name="W2", init=rand.normal(scale=0.1, size=(hid_1_size, hid_2_size)))
+    W2 = ad.Parameter(
+        name="W2", init=rand.normal(scale=0.1, size=(hid_1_size, hid_2_size))
+    )
     b2 = ad.Parameter(name="b2", init=rand.normal(scale=0.1, size=(hid_2_size)))
 
-    W3 = ad.Parameter(name="W3", init=rand.normal(scale=0.1, size=(hid_2_size, output_size)))
+    W3 = ad.Parameter(
+        name="W3", init=rand.normal(scale=0.1, size=(hid_2_size, output_size))
+    )
     b3 = ad.Parameter(name="b3", init=rand.normal(scale=0.1, size=(output_size)))
 
     # building the NN model
@@ -44,21 +50,31 @@ def build_graph(X, y, input_size, hid_1_size, hid_2_size, output_size):
     return loss, W1, b1, W2, b2, W3, b3, hidden_3
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--exe_context',
-                        help='Choose execution context: numpy, gpu',
-                        default='numpy')
+    parser.add_argument(
+        "-c",
+        "--exe_context",
+        help="Choose execution context: numpy, gpu",
+        default="numpy",
+    )
 
-    parser.add_argument('-i', '--num_iter',
-                        help='Choose number of iterations',
-                        default=500)
+    parser.add_argument(
+        "-i", "--num_iter", help="Choose number of iterations", default=500
+    )
+
+    parser.add_argument(
+        "--optim",
+        help="Optimizer type: sgd or adam",
+        default="adam",
+        choices=["sgd", "adam"],
+    )
 
     args = parser.parse_args()
 
     use_gpu = False
 
-    if args.exe_context == 'gpu':
+    if args.exe_context == "gpu":
         use_gpu = True
     n_iter = int(args.num_iter)
 
@@ -77,12 +93,16 @@ if __name__ == '__main__':
 
     # X and y will be used to input data
     X = ad.Variable(name="X")
-    y = ad.Variable(name='y')
+    y = ad.Variable(name="y")
 
-    loss, W1, b1, W2, b2, W3, b3, logit = build_graph(X, y, input_size, hid_1_size, hid_2_size, output_size)
+    loss, W1, b1, W2, b2, W3, b3, logit = build_graph(
+        X, y, input_size, hid_1_size, hid_2_size, output_size
+    )
     # Using Adam optimizer
     # optimizer = au.optim.Adam(loss, params=[W1, b1, W2, b2, W3, b3], lr=lr)
-    optimizer = au.optim.Adam(loss, params=[W1, b1, W2, b2, W3, b3], lr=lr, use_gpu=use_gpu)
+    optimizer = au.optim.Adam(
+        loss, params=[W1, b1, W2, b2, W3, b3], lr=lr, use_gpu=use_gpu
+    )
     # Starts training
     for i in range(n_iter):
         # read next random batch from the training generator
@@ -90,18 +110,23 @@ if __name__ == '__main__':
         # run the optimizer and it will return the cost
         # after that iteration
         loss_now = optimizer.step(feed_dict={X: X_batch, y: y_batch})
-        if i <= 10 or (i <= 100 and i % 10 == 0) or (i <= 1000 and i % 100 == 0) or (i <= 10000 and i % 500 == 0):
-            fmt_str = 'iter: {0:>5d} cost: {1:>8.5f}'
+        if (
+            i <= 10
+            or (i <= 100 and i % 10 == 0)
+            or (i <= 1000 and i % 100 == 0)
+            or (i <= 10000 and i % 500 == 0)
+        ):
+            fmt_str = "iter: {0:>5d} cost: {1:>8.5f}"
             print(fmt_str.format(i, loss_now[0]))
 
     # printing validation accuracy
     # TODO (upul) optimize hyper-parameters using validation dataset
     val_acc = measure_accuracy(logit, data.validation(), use_gpu=use_gpu)
-    print('Validation accuracy: {:>.2f}'.format(val_acc))
+    print("Validation accuracy: {:>.2f}".format(val_acc))
 
     # printing testing accuracy
     test_acc = measure_accuracy(logit, data.testing(), use_gpu=use_gpu)
-    print('Testing accuracy: {:>.2f}'.format(test_acc))
+    print("Testing accuracy: {:>.2f}".format(test_acc))
 
     end = timeit.default_timer()
-    print('Time taken for training/testing: {0:.3f} seconds'.format(end - start))
+    print("Time taken for training/testing: {0:.3f} seconds".format(end - start))

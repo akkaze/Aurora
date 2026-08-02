@@ -1,13 +1,16 @@
 from .autodiff import Node
 from .autodiff import Parameter
 from .autodiff import Variable
+from .autodiff import Const
 from .autodiff import broadcast_to
 from .autodiff import matmul
 from .autodiff import reduce_sum
 from .autodiff import reshape
+from .autodiff import const
+from .autodiff import print_
 from .executor import Executor
 from .gradients import gradients
-from .math import tanh
+from .math import tanh, exp, log, sqrt
 from .numerical_gradient import eval_numerical_grad
 
 __all__ = ["Variable", "Parameter", "gradients", "Node", "Executor",

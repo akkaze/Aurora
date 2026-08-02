@@ -2,7 +2,11 @@
 *.so
 *.pyd
 *~
-
+*.d2
+*.log
+*.png
+log.txt
+aurora.egg-info
 build/
 dist/
 .idea

@@ -1,4 +1,4 @@
-import numpy as np
+import cunumpy as xp
 from aurora.autodiff.autodiff import PlaceholderOp
 from .utils import find_topo_sort
 try:
@@ -22,8 +22,8 @@ class Executor:
         """
         self.eval_node_list = eval_list
         self.ctx = None
-        if use_gpu:
-            self.ctx = ndarray.gpu(0)
+        # if use_gpu:
+            # self.ctx = ndarray.gpu(0)
 
         self.topo_order = find_topo_sort(self.eval_node_list)
         self.node_to_arr_map = None
@@ -96,18 +96,9 @@ class Executor:
         use_numpy = self.ctx is None
         node_to_val_map = {}
         for node, value in feed_shapes.items():
-            if use_numpy:
-                # all values passed in feed_dict must be np.ndarray
-                assert isinstance(value, np.ndarray)
-                node_to_val_map[node] = value
-            else:
-                # convert values to ndarray.NDArray if necessary
-                if isinstance(value, np.ndarray):
-                    node_to_val_map[node] = ndarray.array(value, ctx=self.ctx)
-                elif isinstance(value, ndarray.NDArray):
-                    node_to_val_map[node] = value
-                else:
-                    assert False, "feed_dict value type not supported"
+            # all values passed in feed_dict must be np.ndarray
+            assert isinstance(value, xp.ndarray), type(value)
+            node_to_val_map[node] = value
 
         # collect shapes for all placeholders
         feed_shapes = {}
@@ -135,10 +126,8 @@ class Executor:
                 continue
 
             input_vals = [node_to_val_map[n] for n in node.inputs]
-            if use_numpy:
-                node_val = np.empty(shape=self.node_to_shape_map[node])
-            else:
-                node_val = self.node_to_arr_map[node]
+            node_val = xp.empty(shape=self.node_to_shape_map[node])
+            # node_val = self.node_to_arr_map[node]
             # node_val is modified in-place whether np.ndarray or NDArray
             node.op.compute(node, input_vals, node_val, use_numpy)
             node_to_val_map[node] = node_val
